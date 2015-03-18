@@ -66,7 +66,7 @@ namespace ServiceStack.BundlerRunOnSave
         /// </summary>
         protected override void Initialize()
         {
-            Trace.WriteLine (string.Format(CultureInfo.CurrentCulture, "Entering Initialize() of: {0}", this.ToString()));
+            Trace.WriteLine(string.Format(CultureInfo.CurrentCulture, "Entering Initialize() of: {0}", this.ToString()));
             base.Initialize();
 
             _outputWindow = new OutputWindowWriter(this, GuidList.guidBundlerRunOnSaveOutputWindowPane, "Bundler");
@@ -148,10 +148,10 @@ namespace ServiceStack.BundlerRunOnSave
 
                 // make sure the bundler exists
                 var directory = new FileInfo(projectItem.ContainingProject.FileName).Directory;
-                var bunderDirectory = directory.GetDirectories("bundler").FirstOrDefault();
-                if (bunderDirectory == null) return;
+                var bundlerDirectory = directory.GetDirectories("bundler").FirstOrDefault();
+                if (bundlerDirectory == null) return;
 
-                var bundleCommand = bunderDirectory.GetFiles("bundler.cmd").FirstOrDefault();
+                var bundleCommand = bundlerDirectory.GetFiles("bundler.cmd").FirstOrDefault();
                 if (bundleCommand == null) return;
 
                 // make sure the files are in the bundler folder
@@ -159,7 +159,33 @@ namespace ServiceStack.BundlerRunOnSave
                 for (short i = 0; i < projectItem.FileCount; i += 1)
                     fileNames.Add(projectItem.FileNames[i]);
 
-                if (fileNames.Any(m => m.StartsWith(bunderDirectory.FullName))) return;
+                if (fileNames.Any(m => m.StartsWith(bundlerDirectory.FullName))) return;
+
+                // "Touch" the first file that is referenced in the .bundle file, so that nested/imported
+                // less files still trigger a recompile (and a cache-bust)
+                if (projectItem.Name.EndsWith(".less"))
+                {
+                    var contentDirectory = directory.GetDirectories("Content").FirstOrDefault();
+                    if (contentDirectory == null) return;
+
+                    var bundleFile = contentDirectory.GetFiles("*.bundle").FirstOrDefault();
+                    if (bundleFile == null) return;
+
+                    string lessFileName;
+                    using (var reader = new StreamReader(bundleFile.FullName))
+                    {
+                        lessFileName = reader.ReadLine();
+                    }
+
+                    if (lessFileName != null)
+                    {
+                        var fileToTouch = contentDirectory.GetFiles(lessFileName).FirstOrDefault();
+                        if (fileToTouch != null)
+                        {
+                            fileToTouch.LastWriteTime = DateTime.Now;
+                        }
+                    }
+                }
 
                 RunBundler(bundleCommand.FullName);
             }
